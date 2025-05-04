@@ -1,3 +1,6 @@
 playwright>=1.32.0
 requests>=2.28.0
-pathlib>=1.0.1 
+pathlib>=1.0.1
+gazpacho
+beautifulsoup4>=4.10.0
+lxml>=4.9.0 

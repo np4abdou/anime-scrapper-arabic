@@ -1,2 +1,2 @@
-run = "bash setup.sh && python anime.py"
+run = "python replit_version.py"
 language = "python3" 
