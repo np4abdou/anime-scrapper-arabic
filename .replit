@@ -1,0 +1,2 @@
+run = "bash setup.sh && python anime.py"
+language = "python3" 

@@ -65,6 +65,41 @@ HEADERS = {
     "Accept-Encoding": "gzip",
 }
 
+# Check if we're running on repl.it
+def is_replit():
+    return 'REPL_ID' in os.environ
+
+# Ensure Playwright browsers are installed
+def ensure_playwright_browsers():
+    try:
+        # First check if we're on repl.it
+        if is_replit():
+            print("Running on repl.it environment, checking for Playwright browsers...")
+            
+            # Try to detect if browsers are missing
+            try:
+                with sync_playwright() as p:
+                    browser = p.chromium.launch()
+                    browser.close()
+                print("Playwright browsers are already installed!")
+            except Exception as e:
+                if "Executable doesn't exist" in str(e):
+                    print("Playwright browsers are missing. Installing now...")
+                    os.system("python -m playwright install chromium")
+                    print("Installation complete. If you still encounter issues, please run:")
+                    print("python -m playwright install")
+                    print("in the terminal/shell.")
+                else:
+                    print(f"Unexpected error with Playwright: {e}")
+    except Exception as e:
+        print(f"Error while ensuring Playwright browsers: {e}")
+        print("If you encounter browser errors, please run:")
+        print("python -m playwright install")
+        print("in the terminal/shell.")
+
+# Run the browser check early
+ensure_playwright_browsers()
+
 
 class AnimeDatabase:
     """Handles storage and retrieval of anime metadata and navigation patterns."""
@@ -251,15 +286,42 @@ class SiteInteractor:
     
     def start_browser(self, headless: bool = True):
         """Start the browser."""
-        self.playwright = sync_playwright().start()
-        self.browser = self.playwright.chromium.launch(headless=headless)
-        self.current_page = self.browser.new_page()
-        # Set timeout to 60 seconds for slow connections
-        self.current_page.set_default_timeout(60000)
-        # Add user agent to avoid detection
-        self.current_page.set_extra_http_headers({"User-Agent": "Mozilla/5.0 (Windows NT 10.0; Win64; x64) AppleWebKit/537.36 (KHTML, like Gecko) Chrome/96.0.4664.110 Safari/537.36"})
-        # Enable JavaScript to handle dynamic content
-        self.current_page.context.add_init_script("Object.defineProperty(navigator, 'webdriver', {get: () => undefined})")
+        try:
+            self.playwright = sync_playwright().start()
+            try:
+                self.browser = self.playwright.chromium.launch(headless=headless)
+                self.current_page = self.browser.new_page()
+                # Set timeout to 60 seconds for slow connections
+                self.current_page.set_default_timeout(60000)
+                # Add user agent to avoid detection
+                self.current_page.set_extra_http_headers({"User-Agent": "Mozilla/5.0 (Windows NT 10.0; Win64; x64) AppleWebKit/537.36 (KHTML, like Gecko) Chrome/96.0.4664.110 Safari/537.36"})
+                # Enable JavaScript to handle dynamic content
+                self.current_page.context.add_init_script("Object.defineProperty(navigator, 'webdriver', {get: () => undefined})")
+            except Exception as e:
+                if "Executable doesn't exist" in str(e) and is_replit():
+                    print("=" * 50)
+                    print("Playwright browser executable not found. Trying to install...")
+                    print("=" * 50)
+                    os.system("python -m playwright install chromium")
+                    print("Installation attempted. Trying to launch browser again...")
+                    # Try one more time after installation
+                    self.browser = self.playwright.chromium.launch(headless=headless)
+                    self.current_page = self.browser.new_page()
+                    self.current_page.set_default_timeout(60000)
+                    self.current_page.set_extra_http_headers({"User-Agent": "Mozilla/5.0 (Windows NT 10.0; Win64; x64) AppleWebKit/537.36 (KHTML, like Gecko) Chrome/96.0.4664.110 Safari/537.36"})
+                    self.current_page.context.add_init_script("Object.defineProperty(navigator, 'webdriver', {get: () => undefined})")
+                else:
+                    raise e
+        except Exception as e:
+            print(f"Error starting browser: {e}")
+            if "Executable doesn't exist" in str(e):
+                print("\n" + "=" * 60)
+                print("ERROR: Playwright browser binaries not installed.")
+                print("Please run: python -m playwright install")
+                print("Or if you're using repl.it, visit the Shell tab and run:")
+                print("python -m playwright install chromium")
+                print("=" * 60 + "\n")
+            raise e
     
     def close_browser(self):
         """Close the browser."""
