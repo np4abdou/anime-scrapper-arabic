@@ -594,59 +594,77 @@ def main():
         
         if choice == "1":
             query = input(f"{bcolors.HEADER}Enter anime title to search: {bcolors.ENDC}")
-            results = scraper.search_anime(query)
-            
-            if not results:
-                continue
-            
-            # Display results
-            print("\nSearch Results:")
-            print(f"{bcolors.OKBLUE}{'='*60}{bcolors.ENDC}")
-            print(f"{bcolors.OKCYAN}{'#':<4}{'Title':<50}{bcolors.ENDC}")
-            print(f"{bcolors.OKBLUE}{'-'*60}{bcolors.ENDC}")
-            
-            for i, result in enumerate(results, 1):
-                title = result['title']
-                if len(title) > 45:
-                    title = title[:42] + "..."
-                print(f"{i:<4}{title:<50}")
-            
-            print(f"{bcolors.OKBLUE}{'='*60}{bcolors.ENDC}")
-            
-            # Get user selection
+            search_and_process(scraper, query)
+        elif choice == "2":
+            print(f"\n{bcolors.OKGREEN}Thank you for using Anime Downloader!{bcolors.ENDC}")
+            sys.exit(0)
+        else:
+            # Treat input as anime name
+            search_and_process(scraper, choice)
+
+def search_and_process(scraper, query):
+    """Search for anime and process selection"""
+    results = scraper.search_anime(query)
+    
+    if not results:
+        return
+    
+    # Display results
+    print("\nSearch Results:")
+    print(f"{bcolors.OKBLUE}{'='*60}{bcolors.ENDC}")
+    print(f"{bcolors.OKCYAN}{'#':<4}{'Title':<50}{bcolors.ENDC}")
+    print(f"{bcolors.OKBLUE}{'-'*60}{bcolors.ENDC}")
+    
+    for i, result in enumerate(results, 1):
+        title = result['title']
+        if len(title) > 45:
+            title = title[:42] + "..."
+        print(f"{i:<4}{title:<50}")
+    
+    print(f"{bcolors.OKBLUE}{'='*60}{bcolors.ENDC}")
+    
+    # Get user selection
+    while True:
+        try:
             selection = input(f"\n{bcolors.HEADER}Enter the number of your selection (0 to cancel): {bcolors.ENDC}")
             
-            try:
-                selection = int(selection)
-                if selection == 0:
-                    continue
+            if not selection.strip():
+                continue
                 
-                if selection < 1 or selection > len(results):
-                    print(f"{bcolors.FAIL}Invalid selection.{bcolors.ENDC}")
-                    continue
+            selection = int(selection)
+            if selection == 0:
+                return
+            
+            if selection < 1 or selection > len(results):
+                print(f"{bcolors.FAIL}Invalid selection. Please choose between 1 and {len(results)}.{bcolors.ENDC}")
+                continue
+            
+            selected_anime = results[selection - 1]
+            print(f"\n{bcolors.OKGREEN}Selected: {selected_anime['title']}{bcolors.ENDC}")
+            
+            # Get episodes
+            episodes = scraper.extract_episodes(selected_anime['link'])
+            
+            if not episodes:
+                return
+            
+            # Display episodes
+            print("\nAvailable Episodes:")
+            print(f"{bcolors.OKBLUE}{'='*60}{bcolors.ENDC}")
+            
+            # Group episodes in rows of 10
+            for i in range(0, len(episodes), 10):
+                row = episodes[i:i+10]
+                print(" ".join([f"{bcolors.OKCYAN}{ep['number'].rjust(4)}{bcolors.ENDC}" for ep in row]))
+            
+            print(f"{bcolors.OKBLUE}{'='*60}{bcolors.ENDC}")
+            
+            # Get episode selection
+            while True:
+                ep_selection = input(f"\n{bcolors.HEADER}Enter episode number to download (0 to go back): {bcolors.ENDC}")
                 
-                selected_anime = results[selection - 1]
-                print(f"\n{bcolors.OKGREEN}Selected: {selected_anime['title']}{bcolors.ENDC}")
-                
-                # Get episodes
-                episodes = scraper.extract_episodes(selected_anime['link'])
-                
-                if not episodes:
-                    continue
-                
-                # Display episodes
-                print("\nAvailable Episodes:")
-                print(f"{bcolors.OKBLUE}{'='*60}{bcolors.ENDC}")
-                
-                # Group episodes in rows of 10
-                for i in range(0, len(episodes), 10):
-                    row = episodes[i:i+10]
-                    print(" ".join([f"{bcolors.OKCYAN}{ep['number'].rjust(4)}{bcolors.ENDC}" for ep in row]))
-                
-                print(f"{bcolors.OKBLUE}{'='*60}{bcolors.ENDC}")
-                
-                # Get episode selection
-                ep_selection = input(f"\n{bcolors.HEADER}Enter episode number to download: {bcolors.ENDC}")
+                if ep_selection == "0":
+                    return
                 
                 # Find the selected episode
                 selected_episode = None
@@ -656,13 +674,14 @@ def main():
                         break
                 
                 if not selected_episode:
-                    print(f"{bcolors.FAIL}Episode {ep_selection} not found.{bcolors.ENDC}")
+                    print(f"{bcolors.FAIL}Episode {ep_selection} not found. Please try again.{bcolors.ENDC}")
                     continue
                 
                 # Get download links
                 download_links = scraper.extract_download_links(selected_episode['link'])
                 
                 if not download_links:
+                    print(f"{bcolors.FAIL}No download links found for this episode.{bcolors.ENDC}")
                     continue
                 
                 # Display download options
@@ -680,47 +699,48 @@ def main():
                 print(f"{bcolors.OKBLUE}{'='*60}{bcolors.ENDC}")
                 
                 # Get link selection
-                link_selection = input(f"\n{bcolors.HEADER}Enter the number of the server to download from: {bcolors.ENDC}")
-                
-                try:
-                    link_selection = int(link_selection)
-                    if link_selection < 1 or link_selection > len(download_links):
-                        print(f"{bcolors.FAIL}Invalid selection.{bcolors.ENDC}")
-                        continue
+                while True:
+                    link_selection = input(f"\n{bcolors.HEADER}Enter the number of the server to download from (0 to go back): {bcolors.ENDC}")
                     
-                    selected_link = download_links[link_selection - 1]
-                    print(f"\n{bcolors.OKGREEN}Selected: {selected_link['host']}{bcolors.ENDC}")
+                    if link_selection == "0":
+                        break
                     
-                    # Download the file
-                    filename = f"{selected_anime['title']}_Episode_{selected_episode['number']}.mp4"
-                    destination = DOWNLOAD_DIR / filename
-                    
-                    # For direct download (this is simplified - some servers might need special handling)
-                    print(f"\n{bcolors.WARNING}Note: This is a simplified version that may not support all download servers.{bcolors.ENDC}")
-                    print(f"{bcolors.WARNING}For MediaFire, Google Drive, or other services, you might need to manually download.{bcolors.ENDC}")
-                    print(f"\n{bcolors.HEADER}Download URL: {selected_link['url']}{bcolors.ENDC}")
-                    
-                    download = input(f"\n{bcolors.HEADER}Attempt direct download? (y/n): {bcolors.ENDC}")
-                    if download.lower() == 'y':
-                        scraper.download_file(selected_link['url'], destination)
-                except ValueError:
-                    print(f"{bcolors.FAIL}Invalid selection.{bcolors.ENDC}")
-                    continue
-            except ValueError:
-                print(f"{bcolors.FAIL}Invalid selection.{bcolors.ENDC}")
-                continue
-        elif choice == "2":
-            print(f"\n{bcolors.OKGREEN}Thank you for using Anime Downloader!{bcolors.ENDC}")
-            sys.exit(0)
-        else:
-            # Treat input as anime name
-            results = scraper.search_anime(choice)
+                    try:
+                        link_selection = int(link_selection)
+                        if link_selection < 1 or link_selection > len(download_links):
+                            print(f"{bcolors.FAIL}Invalid selection. Please choose between 1 and {len(download_links)}.{bcolors.ENDC}")
+                            continue
+                        
+                        selected_link = download_links[link_selection - 1]
+                        print(f"\n{bcolors.OKGREEN}Selected: {selected_link['host']}{bcolors.ENDC}")
+                        
+                        # Download the file
+                        filename = f"{selected_anime['title']}_Episode_{selected_episode['number']}.mp4"
+                        destination = DOWNLOAD_DIR / filename
+                        
+                        # For direct download (this is simplified - some servers might need special handling)
+                        print(f"\n{bcolors.WARNING}Note: This is a simplified version that may not support all download servers.{bcolors.ENDC}")
+                        print(f"{bcolors.WARNING}For MediaFire, Google Drive, or other services, you might need to manually download.{bcolors.ENDC}")
+                        print(f"\n{bcolors.HEADER}Download URL: {selected_link['url']}{bcolors.ENDC}")
+                        
+                        download = input(f"\n{bcolors.HEADER}Attempt direct download? (y/n): {bcolors.ENDC}")
+                        if download.lower() == 'y':
+                            scraper.download_file(selected_link['url'], destination)
+                        
+                        # Ask if they want to download more
+                        more_downloads = input(f"\n{bcolors.HEADER}Download another episode? (y/n): {bcolors.ENDC}")
+                        if more_downloads.lower() != 'y':
+                            return
+                        else:
+                            break  # Break the link selection loop to go back to episode selection
+                    except ValueError:
+                        print(f"{bcolors.FAIL}Invalid selection. Please enter a number.{bcolors.ENDC}")
             
-            if not results:
-                continue
-            
-            # Continue with anime selection as above...
-            # (code omitted for brevity - would be the same as the selection code above)
+        except ValueError:
+            print(f"{bcolors.FAIL}Invalid selection. Please enter a number.{bcolors.ENDC}")
+        except Exception as e:
+            print(f"{bcolors.FAIL}Error: {e}{bcolors.ENDC}")
+            break
 
 if __name__ == "__main__":
     main() 
