@@ -1,2 +1,2 @@
-run = "bash setup.sh && python anime.py"
+run = "sudo bash setup.sh && python anime.py"
 language = "python3" 
