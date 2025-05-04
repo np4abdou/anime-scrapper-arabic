@@ -108,44 +108,99 @@ class AnimeScraperNoPlaywright:
             response = self.session.get(search_url)
             response.raise_for_status()
             
+            # Save HTML for debugging
+            with open("search_response.html", "w", encoding="utf-8") as f:
+                f.write(response.text)
+            print(f"{bcolors.WARNING}Saved HTML response to search_response.html for debugging{bcolors.ENDC}")
+            
             # Parse the HTML
             soup = BeautifulSoup(response.text, 'lxml')
             
-            # Find anime cards (adjust selectors based on the site structure)
-            anime_cards = soup.select('.anime-card, .post-item, article, .card')
+            # Try multiple selectors for anime cards
+            selectors = [
+                '.anime-card', 
+                '.post-item', 
+                'article', 
+                '.card',
+                'div.anime',
+                '.anime-list-content .anime-card',
+                '.anime-list-content li',
+                '.page-content-container .anime-card',
+                'div[class*="anime"]',
+                '.post'
+            ]
+            
+            anime_cards = []
+            for selector in selectors:
+                cards = soup.select(selector)
+                if cards:
+                    print(f"{bcolors.OKGREEN}Found {len(cards)} anime cards with selector: {selector}{bcolors.ENDC}")
+                    anime_cards = cards
+                    break
             
             if not anime_cards:
-                print(f"{bcolors.FAIL}No anime found with that query.{bcolors.ENDC}")
+                print(f"{bcolors.FAIL}No anime found with any selectors. Try entering a direct URL.{bcolors.ENDC}")
+                direct_url = input(f"{bcolors.HEADER}Enter anime URL directly (or press Enter to cancel): {bcolors.ENDC}")
+                if direct_url and direct_url.startswith("http"):
+                    return [{'title': query, 'link': direct_url}]
                 return []
             
             results = []
             for card in anime_cards:
-                # Extract title
-                title_elem = card.select_one('h3, .title, h2, .name')
-                if not title_elem:
-                    continue
-                title = title_elem.get_text().strip()
-                
-                # Extract link
-                link_elem = card.select_one('a')
-                if not link_elem:
-                    continue
-                link = link_elem.get('href')
-                
-                # Ensure the link is absolute
-                if link and not link.startswith('http'):
-                    link = f"{site}{link}"
-                
-                results.append({
-                    'title': title,
-                    'link': link
-                })
+                try:
+                    # Try multiple title selectors
+                    title_selectors = ['h3', '.title', 'h2', '.name', 'h3 a', '.card-title', 
+                                       'a[title]', '[class*="title"]', 'a']
+                    title = None
+                    for selector in title_selectors:
+                        title_elem = card.select_one(selector)
+                        if title_elem:
+                            title = title_elem.get_text().strip() or title_elem.get('title')
+                            if title:
+                                break
+                    
+                    # If still no title, try getting from img alt
+                    if not title:
+                        img = card.select_one('img')
+                        if img and img.get('alt'):
+                            title = img.get('alt').strip()
+                    
+                    # Extract link - try different ways
+                    link = None
+                    link_elem = card.select_one('a')
+                    if link_elem:
+                        link = link_elem.get('href')
+                    
+                    # Skip if no title or link
+                    if not title or not link:
+                        continue
+                        
+                    # Ensure the link is absolute
+                    if link and not link.startswith('http'):
+                        link = f"{site}{link}"
+                    
+                    results.append({
+                        'title': title,
+                        'link': link
+                    })
+                except Exception as e:
+                    print(f"{bcolors.FAIL}Error processing card: {e}{bcolors.ENDC}")
             
-            print(f"{bcolors.OKGREEN}Found {len(results)} anime matching '{query}'{bcolors.ENDC}")
+            if results:
+                print(f"{bcolors.OKGREEN}Found {len(results)} anime matching '{query}'{bcolors.ENDC}")
+            else:
+                print(f"{bcolors.FAIL}Could not extract anime information from the page.{bcolors.ENDC}")
+                direct_url = input(f"{bcolors.HEADER}Enter anime URL directly (or press Enter to cancel): {bcolors.ENDC}")
+                if direct_url and direct_url.startswith("http"):
+                    return [{'title': query, 'link': direct_url}]
+            
             return results
             
         except Exception as e:
             print(f"{bcolors.FAIL}Error during search: {e}{bcolors.ENDC}")
+            direct_url = input(f"{bcolors.HEADER}Enter anime URL directly (or press Enter to cancel): {bcolors.ENDC}")
+            if direct_url and direct_url.startswith("http"):
+                return [{'title': query, 'link': direct_url}]
             return []
     
     def extract_episodes(self, anime_url):
@@ -157,47 +212,126 @@ class AnimeScraperNoPlaywright:
             response = self.session.get(anime_url)
             response.raise_for_status()
             
+            # Save HTML for debugging
+            with open("anime_page.html", "w", encoding="utf-8") as f:
+                f.write(response.text)
+            print(f"{bcolors.WARNING}Saved HTML response to anime_page.html for debugging{bcolors.ENDC}")
+            
             # Parse the HTML
             soup = BeautifulSoup(response.text, 'lxml')
             
-            # Find episode elements (adjust selectors based on the site structure)
-            episode_elements = soup.select('.episodes-card-container .episode-card, .episodes-list-content .episode-card')
+            # Try multiple selectors for episode elements
+            episode_selectors = [
+                '.episodes-card-container .episode-card',
+                '.episodes-list-content .episode-card',
+                '.episodes-list-content li',
+                '.episodes-card-container a',
+                '.page-content-container .episode-card',
+                'a[href*="episode"]',
+                'a[href*="الحلقة"]',
+                'div[class*="episode"]',
+                'li[class*="episode"]',
+                'a[onclick*="openEpisode"]'
+            ]
+            
+            episode_elements = []
+            for selector in episode_selectors:
+                elements = soup.select(selector)
+                if elements:
+                    print(f"{bcolors.OKGREEN}Found {len(elements)} episode elements with selector: {selector}{bcolors.ENDC}")
+                    episode_elements = elements
+                    break
             
             if not episode_elements:
-                print(f"{bcolors.FAIL}No episodes found.{bcolors.ENDC}")
-                return []
+                print(f"{bcolors.FAIL}No episodes found with any selector.{bcolors.ENDC}")
+                
+                # Try to find any links that might be episodes
+                all_links = soup.select('a')
+                episode_links = [a for a in all_links if 'episode' in a.get('href', '').lower() or 'الحلقة' in a.get('href', '')]
+                
+                if episode_links:
+                    print(f"{bcolors.OKGREEN}Found {len(episode_links)} potential episode links by searching all anchors.{bcolors.ENDC}")
+                    episode_elements = episode_links
+                else:
+                    return []
             
             episodes = []
             for element in episode_elements:
-                # Extract episode number and link
-                link_elem = element.select_one('a')
-                if not link_elem:
-                    continue
-                
-                link = link_elem.get('href')
-                
-                # Try to find episode number
-                ep_match = re.search(r'الحلقة-(\d+)', link or '')
-                if ep_match:
-                    episode_number = ep_match.group(1)
-                else:
-                    # Try to extract from text content
-                    text = element.get_text()
-                    ep_match = re.search(r'الحلقة\s*(\d+)', text)
+                try:
+                    # Extract link
+                    if element.name == 'a':
+                        link = element.get('href')
+                    else:
+                        link_elem = element.select_one('a')
+                        link = link_elem.get('href') if link_elem else None
+                    
+                    # Skip if no link
+                    if not link:
+                        continue
+                    
+                    # For onclick handlers (common in witanime)
+                    onclick = element.get('onclick')
+                    if onclick and 'openEpisode' in onclick:
+                        try:
+                            # Extract base64 from openEpisode('base64string')
+                            import re
+                            base64_match = re.search(r"openEpisode\('([^']+)'\)", onclick)
+                            if base64_match:
+                                base64_url = base64_match.group(1)
+                                decoded_url = base64.b64decode(base64_url).decode('utf-8')
+                                link = decoded_url
+                        except Exception as decode_err:
+                            print(f"{bcolors.FAIL}Error decoding base64 URL: {decode_err}{bcolors.ENDC}")
+                    
+                    # Try various ways to find episode number
+                    episode_number = None
+                    
+                    # Try to find in URL
+                    ep_match = re.search(r'الحلقة-(\d+)', link or '')
                     if ep_match:
                         episode_number = ep_match.group(1)
                     else:
-                        # Generate sequential number
-                        episode_number = str(len(episodes) + 1)
-                
-                # Ensure the link is absolute
-                if link and not link.startswith('http'):
-                    link = f"{self.default_site}{link}"
-                
-                episodes.append({
-                    'number': episode_number,
-                    'link': link
-                })
+                        # Try episode-X pattern
+                        ep_match = re.search(r'episode-(\d+)', link.lower() or '')
+                        if ep_match:
+                            episode_number = ep_match.group(1)
+                        else:
+                            # Try to extract from text content
+                            text = element.get_text()
+                            ep_match = re.search(r'الحلقة\s*(\d+)', text)
+                            if ep_match:
+                                episode_number = ep_match.group(1)
+                            else:
+                                ep_match = re.search(r'حلقة\s*(\d+)', text)
+                                if ep_match:
+                                    episode_number = ep_match.group(1)
+                                else:
+                                    ep_match = re.search(r'episode\s*(\d+)', text.lower())
+                                    if ep_match:
+                                        episode_number = ep_match.group(1)
+                                    else:
+                                        # Try to find any number in text
+                                        number_match = re.search(r'(\d+)', text)
+                                        if number_match:
+                                            episode_number = number_match.group(1)
+                                        else:
+                                            # Generate sequential number as last resort
+                                            episode_number = str(len(episodes) + 1)
+                    
+                    # Ensure the link is absolute
+                    if link and not link.startswith('http'):
+                        link = f"{self.default_site}{link}"
+                    
+                    # Add to episodes only if we haven't seen this episode number before
+                    if episode_number and link:
+                        existing_episodes = [ep for ep in episodes if ep['number'] == episode_number]
+                        if not existing_episodes:
+                            episodes.append({
+                                'number': episode_number,
+                                'link': link
+                            })
+                except Exception as e:
+                    print(f"{bcolors.FAIL}Error processing episode element: {e}{bcolors.ENDC}")
             
             # Sort episodes by number
             episodes.sort(key=lambda x: int(x['number']) if x['number'].isdigit() else float('inf'))
@@ -218,14 +352,56 @@ class AnimeScraperNoPlaywright:
             response = self.session.get(episode_url)
             response.raise_for_status()
             
+            # Save HTML for debugging
+            with open("episode_page.html", "w", encoding="utf-8") as f:
+                f.write(response.text)
+            print(f"{bcolors.WARNING}Saved HTML response to episode_page.html for debugging{bcolors.ENDC}")
+            
             # Parse the HTML
             soup = BeautifulSoup(response.text, 'lxml')
             
-            # Look for the download button
-            download_button = soup.select_one('a:contains("تحميل الحلقة"), a:contains("تحميل")')
+            # Try multiple selectors for download buttons
+            download_button_selectors = [
+                'a:contains("تحميل الحلقة")', 
+                'a:contains("تحميل")',
+                'a.btn-site:contains("تحميل")',
+                '.btn-site',
+                'a.btn-site',
+                '.episodes-buttons-list a',
+                '.episode-buttons-container a',
+                'a.btn-primary',
+                'a.btn-download',
+                'a[href*="download"]',
+                'a[class*="download"]'
+            ]
+            
+            download_button = None
+            for selector in download_button_selectors:
+                try:
+                    button = soup.select_one(selector)
+                    if button:
+                        print(f"{bcolors.OKGREEN}Found download button with selector: {selector}{bcolors.ENDC}")
+                        download_button = button
+                        break
+                except Exception:
+                    continue
+            
+            # If can't find with CSS selectors, try text matching
+            if not download_button:
+                print(f"{bcolors.WARNING}Trying text matching for download buttons...{bcolors.ENDC}")
+                download_texts = ["تحميل الحلقة", "تحميل", "download", "تنزيل"]
+                for a in soup.find_all('a'):
+                    if any(text.lower() in a.get_text().lower() for text in download_texts):
+                        download_button = a
+                        print(f"{bcolors.OKGREEN}Found download button by text: {a.get_text()}{bcolors.ENDC}")
+                        break
             
             if not download_button:
-                print(f"{bcolors.FAIL}No download button found.{bcolors.ENDC}")
+                print(f"{bcolors.FAIL}No download button found. Trying direct server extraction...{bcolors.ENDC}")
+                # Try to find direct server links on the current page
+                server_links = self._extract_server_links(soup)
+                if server_links:
+                    return server_links
                 return []
             
             # Get the download page URL
@@ -235,49 +411,112 @@ class AnimeScraperNoPlaywright:
             if download_url and not download_url.startswith('http'):
                 download_url = f"{self.default_site}{download_url}"
             
+            print(f"{bcolors.OKGREEN}Navigating to download page: {download_url}{bcolors.ENDC}")
+            
             # Fetch the download page
-            response = self.session.get(download_url)
-            response.raise_for_status()
+            download_response = self.session.get(download_url)
+            download_response.raise_for_status()
             
-            # Parse the HTML
-            soup = BeautifulSoup(response.text, 'lxml')
+            # Save download page HTML for debugging
+            with open("download_page.html", "w", encoding="utf-8") as f:
+                f.write(download_response.text)
+            print(f"{bcolors.WARNING}Saved download page HTML to download_page.html for debugging{bcolors.ENDC}")
             
-            # Find server elements
-            server_elements = soup.select('.download-servers a, .server-list a, a[href*="drive.google"], a[href*="mediafire"]')
+            # Parse the download page HTML
+            download_soup = BeautifulSoup(download_response.text, 'lxml')
             
-            if not server_elements:
-                print(f"{bcolors.FAIL}No download servers found.{bcolors.ENDC}")
-                return []
-            
-            download_links = []
-            for element in server_elements:
-                url = element.get('href')
-                # Try to get server name
-                name_elem = element.select_one('.server-name, .dashboard-button-text')
-                if name_elem:
-                    name = name_elem.get_text().strip()
-                else:
-                    # Determine name from URL
-                    if "drive.google" in url:
-                        name = "Google Drive"
-                    elif "mediafire" in url:
-                        name = "MediaFire"
-                    elif "mega" in url:
-                        name = "MEGA"
-                    else:
-                        name = "Unknown Server"
-                
-                download_links.append({
-                    'host': name,
-                    'url': url
-                })
-            
-            print(f"{bcolors.OKGREEN}Found {len(download_links)} download links{bcolors.ENDC}")
-            return download_links
+            # Extract server links from the download page
+            return self._extract_server_links(download_soup)
             
         except Exception as e:
             print(f"{bcolors.FAIL}Error extracting download links: {e}{bcolors.ENDC}")
             return []
+    
+    def _extract_server_links(self, soup):
+        """Extract server links from a soup object"""
+        # Try various selectors for server elements
+        server_selectors = [
+            '.download-servers a', 
+            '.server-list a', 
+            'a[href*="drive.google"]', 
+            'a[href*="mediafire"]',
+            '.servers a',
+            '.servers-list a',
+            '.server-item a',
+            '.server a',
+            'a.dashboard-button',
+            'a.download-link',
+            'a[class*="download"]',
+            'a.btn-download'
+        ]
+        
+        server_elements = []
+        for selector in server_selectors:
+            elements = soup.select(selector)
+            if elements:
+                print(f"{bcolors.OKGREEN}Found {len(elements)} server elements with selector: {selector}{bcolors.ENDC}")
+                server_elements = elements
+                break
+        
+        if not server_elements:
+            print(f"{bcolors.FAIL}No download servers found with any selector.{bcolors.ENDC}")
+            
+            # Try finding any links to common file hosts
+            all_links = soup.find_all('a')
+            host_keywords = ['drive.google', 'mediafire', 'mega.nz', 'solidfiles', 'mp4upload']
+            server_elements = [a for a in all_links if any(host in a.get('href', '').lower() for host in host_keywords)]
+            
+            if server_elements:
+                print(f"{bcolors.OKGREEN}Found {len(server_elements)} potential server links by checking all links.{bcolors.ENDC}")
+            else:
+                return []
+        
+        download_links = []
+        for element in server_elements:
+            try:
+                url = element.get('href')
+                
+                # Skip invalid URLs
+                if not url or url == "#" or url.startswith('javascript:'):
+                    continue
+                
+                # Try to get server name
+                name_elem = element.select_one('.server-name, .dashboard-button-text, .notice, .server-content')
+                if name_elem:
+                    name = name_elem.get_text().strip()
+                else:
+                    # Use element text if available
+                    name = element.get_text().strip()
+                    # If empty text, determine name from URL
+                    if not name:
+                        if "drive.google" in url:
+                            name = "Google Drive"
+                        elif "mediafire" in url:
+                            name = "MediaFire"
+                        elif "mega" in url:
+                            name = "MEGA"
+                        elif "solidfiles" in url:
+                            name = "SolidFiles"
+                        elif "mp4upload" in url:
+                            name = "MP4Upload"
+                        elif "4shared" in url:
+                            name = "4shared"
+                        else:
+                            name = "Unknown Server"
+                
+                # Add to download links if not already in the list
+                existing_links = [link for link in download_links if link['url'] == url]
+                if not existing_links:
+                    download_links.append({
+                        'host': name,
+                        'url': url
+                    })
+                    print(f"{bcolors.OKGREEN}Found server: {name} - {url}{bcolors.ENDC}")
+            except Exception as e:
+                print(f"{bcolors.FAIL}Error processing server element: {e}{bcolors.ENDC}")
+        
+        print(f"{bcolors.OKGREEN}Found {len(download_links)} download links{bcolors.ENDC}")
+        return download_links
     
     def download_file(self, url, destination):
         """Download a file from URL to destination"""
