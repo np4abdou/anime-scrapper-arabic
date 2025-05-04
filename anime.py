@@ -289,7 +289,21 @@ class SiteInteractor:
         try:
             self.playwright = sync_playwright().start()
             try:
-                self.browser = self.playwright.chromium.launch(headless=headless)
+                # Special configuration for repl.it
+                browser_args = []
+                if is_replit():
+                    browser_args = [
+                        "--disable-gpu",
+                        "--no-sandbox",
+                        "--disable-setuid-sandbox",
+                        "--disable-dev-shm-usage"
+                    ]
+                    print("Using repl.it-specific browser configuration")
+                
+                self.browser = self.playwright.chromium.launch(
+                    headless=headless,
+                    args=browser_args
+                )
                 self.current_page = self.browser.new_page()
                 # Set timeout to 60 seconds for slow connections
                 self.current_page.set_default_timeout(60000)
@@ -302,10 +316,33 @@ class SiteInteractor:
                     print("=" * 50)
                     print("Playwright browser executable not found. Trying to install...")
                     print("=" * 50)
-                    os.system("python -m playwright install chromium")
+                    os.system("export PLAYWRIGHT_BROWSERS_PATH=0 && python -m playwright install chromium --with-deps")
                     print("Installation attempted. Trying to launch browser again...")
-                    # Try one more time after installation
-                    self.browser = self.playwright.chromium.launch(headless=headless)
+                    # Try one more time after installation with repl.it flags
+                    browser_args = [
+                        "--disable-gpu",
+                        "--no-sandbox",
+                        "--disable-setuid-sandbox",
+                        "--disable-dev-shm-usage"
+                    ]
+                    self.browser = self.playwright.chromium.launch(headless=True, args=browser_args)
+                    self.current_page = self.browser.new_page()
+                    self.current_page.set_default_timeout(60000)
+                    self.current_page.set_extra_http_headers({"User-Agent": "Mozilla/5.0 (Windows NT 10.0; Win64; x64) AppleWebKit/537.36 (KHTML, like Gecko) Chrome/96.0.4664.110 Safari/537.36"})
+                    self.current_page.context.add_init_script("Object.defineProperty(navigator, 'webdriver', {get: () => undefined})")
+                elif "Host system is missing dependencies" in str(e) and is_replit():
+                    print("=" * 50)
+                    print("Missing system dependencies. Using special repl.it configuration...")
+                    print("=" * 50)
+                    # Try with special repl.it configuration
+                    browser_args = [
+                        "--disable-gpu",
+                        "--no-sandbox",
+                        "--disable-setuid-sandbox",
+                        "--disable-dev-shm-usage"
+                    ]
+                    # Force headless mode
+                    self.browser = self.playwright.chromium.launch(headless=True, args=browser_args)
                     self.current_page = self.browser.new_page()
                     self.current_page.set_default_timeout(60000)
                     self.current_page.set_extra_http_headers({"User-Agent": "Mozilla/5.0 (Windows NT 10.0; Win64; x64) AppleWebKit/537.36 (KHTML, like Gecko) Chrome/96.0.4664.110 Safari/537.36"})
@@ -319,7 +356,14 @@ class SiteInteractor:
                 print("ERROR: Playwright browser binaries not installed.")
                 print("Please run: python -m playwright install")
                 print("Or if you're using repl.it, visit the Shell tab and run:")
-                print("python -m playwright install chromium")
+                print("export PLAYWRIGHT_BROWSERS_PATH=0 && python -m playwright install chromium --with-deps")
+                print("=" * 60 + "\n")
+            elif "Host system is missing dependencies" in str(e):
+                print("\n" + "=" * 60)
+                print("ERROR: System dependencies missing.")
+                print("If you're using repl.it, try one of these options:")
+                print("1. Visit the Shell tab and run: python -m playwright install-deps")
+                print("2. Add these args to your code: ['--no-sandbox', '--disable-setuid-sandbox']")
                 print("=" * 60 + "\n")
             raise e
     

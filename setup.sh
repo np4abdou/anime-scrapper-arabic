@@ -1,8 +1,37 @@
 #!/bin/bash
-echo "Installing system dependencies for Playwright..."
-apt-get update
-apt-get install -y libnspr4 libnss3 libdbus-1-3 libatk1.0-0 libatk-bridge2.0-0 libatspi2.0-0 libxcomposite1 libxdamage1 libxfixes3 libgbm1 libxkbcommon0 libasound2 libxcb1
+echo "Setting up environment for repl.it..."
 
-echo "Installing Playwright browsers..."
-python -m playwright install chromium
-echo "Setup complete!" 
+# Install Python dependencies
+pip install -r requirements.txt
+
+# Try to install playwright in a way that works on repl.it
+echo "Installing Playwright..."
+pip install playwright
+
+# Special configuration for repl.it to run without system dependencies
+echo "Setting up special configuration for browser usage..."
+export PLAYWRIGHT_BROWSERS_PATH=0
+python -m playwright install chromium --with-deps
+
+# Create a configuration file for Playwright
+mkdir -p ~/.playwright
+echo '{
+  "browsers": [
+    {
+      "name": "chromium",
+      "headless": true,
+      "launchOptions": {
+        "args": [
+          "--disable-gpu",
+          "--no-sandbox",
+          "--disable-setuid-sandbox",
+          "--disable-dev-shm-usage"
+        ]
+      }
+    }
+  ]
+}' > ~/.playwright/config.json
+
+echo "Setup complete! If you still encounter issues, please run:"
+echo "python -m playwright install-deps"
+echo "in the Shell tab." 
